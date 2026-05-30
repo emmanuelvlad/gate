@@ -753,9 +753,17 @@ retry:
 func (p *Proxy) unregisterConnection(player *connectedPlayer) (found bool) {
 	p.muP.Lock()
 	defer p.muP.Unlock()
-	_, found = p.playerIDs[player.ID()]
-	delete(p.playerNames, strings.ToLower(player.Username()))
-	delete(p.playerIDs, player.ID())
+	if current, ok := p.playerIDs[player.ID()]; ok && current == player {
+		delete(p.playerIDs, player.ID())
+		found = true
+	}
+
+	name := strings.ToLower(player.Username())
+	if current, ok := p.playerNames[name]; ok && current == player {
+		delete(p.playerNames, name)
+		found = true
+	}
+
 	return found
 }
 

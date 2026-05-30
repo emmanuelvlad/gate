@@ -223,7 +223,7 @@ func (c *minecraftConn) startReadLoop() {
 	defer func() { span.SetAttributes(attribute.Int64("net.bytes_read", bytesRead)) }()
 
 	// Make sure to close connection on return, if not already closed
-	defer func() { _ = c.closeKnown(false) }()
+	defer func() { _ = c.closeKnown(false, "readLoopExit") }()
 
 	debug := c.log.V(1)
 
@@ -403,13 +403,13 @@ func (c *minecraftConn) closeOnWriteErr(err error, logKeysAndValues ...any) {
 }
 
 func (c *minecraftConn) Close() error {
-	return c.closeKnown(true)
+	return c.closeKnown(true, "close")
 }
 
 // ErrClosedConn indicates a connection is already closed.
 var ErrClosedConn = errors.New("connection is closed")
 
-func (c *minecraftConn) closeKnown(markKnown bool) (err error) {
+func (c *minecraftConn) closeKnown(markKnown bool, cause string) (err error) {
 	alreadyClosed := true
 	c.closeOnce.Do(func() {
 		defer c.SetAutoReading(true) // free the read loop in case auto reading is disabled
@@ -426,7 +426,13 @@ func (c *minecraftConn) closeKnown(markKnown bool) (err error) {
 			sh.Disconnected()
 
 			if p, ok := sh.(interface{ PlayerLog() logr.Logger }); ok && !c.knownDisconnect.Load() {
-				p.PlayerLog().Info("player has disconnected", "sessionHandler", fmt.Sprintf("%T", sh))
+				p.PlayerLog().Info(
+					"player has disconnected",
+					"sessionHandler", fmt.Sprintf("%T", sh),
+					"cause", cause,
+					"remoteAddr", c.RemoteAddr(),
+					"localAddr", c.LocalAddr(),
+				)
 			}
 		}
 	})
@@ -482,7 +488,7 @@ func KnownDisconnect(c MinecraftConn) bool {
 // Use MinecraftConn.Close to prevent logging of disconnects that are expected.
 func CloseUnknown(c MinecraftConn) error {
 	if mc, ok := c.(*minecraftConn); ok {
-		return mc.closeKnown(false)
+		return mc.closeKnown(false, "closeUnknown")
 	}
 	return c.Close()
 }
