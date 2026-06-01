@@ -699,15 +699,22 @@ func (p *connectedPlayer) config() *config.Config {
 
 // switchToConfigState switches the connection of the client into config state.
 func (p *connectedPlayer) switchToConfigState() {
+	// Close any open bundle before the terminal packet,
+	// else the client throws "Terminal message received in bundle".
+	if p.bundleHandler.InBundleSession() {
+		p.bundleHandler.ToggleBundleSession()
+		if err := p.BufferPacket(new(packet.BundleDelimiter)); err != nil {
+			p.log.Error(err, "error closing bundle before config switch")
+		}
+	}
+
 	if err := p.BufferPacket(new(cfgpacket.StartUpdate)); err != nil {
 		p.log.Error(err, "error writing config packet")
 	}
-
 	p.pendingConfigurationSwitch = true
 	p.MinecraftConn.Writer().SetState(state.Config)
 	// Make sure we don't send any play packets to the player after update start
 	p.MinecraftConn.EnablePlayPacketQueue()
-
 	_ = p.Flush() // Trigger switch finally
 }
 
